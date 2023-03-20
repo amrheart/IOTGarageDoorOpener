@@ -1,0 +1,39 @@
+<head>
+<script>
+function on_button_press(){
+	let ph = document.getElementById('state_change');
+	let att = ph.getAttribute('name');
+	alert(att);
+	ph.setAttribute('value', "Close Garage Door");
+}
+</script>
+<style>
+input{
+	width:100%;
+	height:200px;
+	font-size:70px;
+}
+div{
+	font-size:40px;
+}
+#displayState{
+	font-size:100px;
+}
+</style>
+</head>
+
+<body>
+<form method="post" action="/">
+<h1 id="displayState">Garage Door Is {{state}}</h1>
+<input id="state_change_open" type="submit" value="Open Door" name="state_change">
+<input id="state_change_close" type="submit" value="Close Door" name="state_change">
+<div>
+<p>Stats about the garage</p>
+- Time of last action <br>
+	{{time_of}}<br>
+	{{today_date}}<br>
+- Uses Since Server Start<br>
+	{{uses}}<br>
+</div>
+</form>
+</body>

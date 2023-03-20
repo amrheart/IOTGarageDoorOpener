@@ -1,0 +1,19 @@
+<head>
+<script>
+function test(){
+	let ph = document.getElementById('tester');
+	let the_name = ph.getAttribute('name');
+	alert(the_name);
+}
+function change_name(){
+	let ph = document.getElementById('tester');
+	ph.setAttribute('name', "new_name_wow");
+}
+</script>
+</head>
+
+<body>
+<form>
+<input id="tester" name="some_name1" type="submit" onclick="test(); change_name(); test();">
+</form>
+</body>

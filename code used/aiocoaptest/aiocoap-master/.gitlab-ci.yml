@@ -1,0 +1,115 @@
+# running tests twice, so if something breaks when optional dependencies are
+# missing, it still shows up. (full coverage would mean running each
+# combination, but let's not blow the test matrix out of proportion).
+test:3.7:
+  image: "python:3.7"
+  resource_group: uses-coap-ports
+  script:
+    - env
+    - echo Using cache:; ls .eggs/ || echo No cached .eggs found
+    - rm -f .coverage* collected-coverage
+    - pip3 install coverage
+    - AIOCOAP_TEST_EXTRAS= python3 -m coverage run --parallel ./setup.py test
+    - python3 -m coverage run --parallel ./setup.py test
+    - pip3 install uvloop
+    - AIOCOAP_TESTS_LOOP=uvloop python3 -m coverage run --parallel ./setup.py test
+    # Could just as well do this on the default main loop, but AFAIR uvloop
+    # required occasional workarounds
+    - AIOCOAP_TESTS_LOOP=uvloop AIOCOAP_CLIENT_TRANSPORT=oscore:simple6 AIOCOAP_SERVER_TRANSPORT=oscore:simplesocketserver python3 -m coverage run --parallel ./setup.py test
+    # Not installing python3-gi directly, as Debian's dist-modules is not in
+    # docker image's Python path
+    - apt-get update
+    - apt-get -y install libgirepository1.0-dev
+    - pip3 install pygobject gbulb
+    - AIOCOAP_TESTS_LOOP=gbulb timeout 10m python3 -m coverage run --parallel ./setup.py test || echo Letting failing gbulb test slide
+    - mkdir collected-coverage/3.7/ -p
+    - mv .coverage* collected-coverage/3.7/
+  artifacts:
+    paths:
+      - collected-coverage/3.7/
+  cache:
+    key: python3.7
+    paths:
+      - .eggs/
+
+test:tox:
+  image: debian:bullseye
+  resource_group: uses-coap-ports
+  variables:
+    # Excluding 3.8 means 3.8 is not tested at all :-/
+    TOX_SKIP_ENV: "py3[781]|pypy"
+  script:
+    - rm -f .coverage* collected-coverage
+    - apt-get update
+    - apt-get -y install tox build-essential python3-dev libssl-dev autoconf python3-setuptools python3-pip iproute2
+    # Separate run so I don't waste time telling errors in setup apart from errors at runtime
+    - tox --notest
+    - "AIOCOAP_TEST_MCIF=\"$(ip -j -6 route list default | python3 -c 'import sys, json; print(json.load(sys.stdin)[0][\"dev\"])')\" tox"
+    - mkdir collected-coverage/tox-bullseye/ -p
+    - mv .coverage* collected-coverage/tox-bullseye/
+  artifacts:
+    paths:
+      - collected-coverage/tox-bullseye/
+
+test:tox-bookworm:
+  image: debian:bookworm
+  resource_group: uses-coap-ports
+  variables:
+    # Running only 3.10 and pypy
+    TOX_SKIP_ENV: "py3[789]"
+  script:
+    - rm -f .coverage* collected-coverage
+    - apt-get update
+    - apt-get -y install tox build-essential python3.10-dev libssl-dev autoconf python3-setuptools python3-pip iproute2 libffi-dev pypy3 pypy3-dev
+    # Separate run so I don't waste time telling errors in setup apart from errors at runtime
+    - tox --notest
+    - "AIOCOAP_TEST_MCIF=\"$(ip -j -6 route list default | python3 -c 'import sys, json; print(json.load(sys.stdin)[0][\"dev\"])')\" tox"
+    - mkdir collected-coverage/tox-bookworm/ -p
+    - mv .coverage* collected-coverage/tox-bookworm/
+  artifacts:
+    paths:
+      - collected-coverage/tox-bookworm/
+
+test:tox-on-buster:
+  image: debian:buster
+  resource_group: uses-coap-ports
+  variables:
+    TOX_SKIP_ENV: "py3[891]|pypy"
+  script:
+    - rm -f .coverage* collected-coverage
+    - apt-get update
+    - apt-get -y install tox build-essential python3-dev libssl-dev autoconf python3-setuptools python3-pip iproute2
+    # Separate run so I don't waste time telling errors in setup apart from errors at runtime
+    - tox --notest
+    - "AIOCOAP_TEST_MCIF=\"$(ip -j -6 route list default | python3 -c 'import sys, json; print(json.load(sys.stdin)[0][\"dev\"])')\" tox"
+    - mkdir collected-coverage/tox-buster/ -p
+    - mv .coverage* collected-coverage/tox-buster/
+  artifacts:
+    paths:
+      - collected-coverage/tox-buster/
+
+pages:
+  image: "debian"
+  stage: deploy
+  dependencies:
+    - test:3.7
+    - test:tox
+    - test:tox-on-buster
+    - test:tox-bookworm
+  script:
+    - apt-get update
+    - apt-get -y install python3-pip
+    - python3 -m pip install coverage
+    - rm -f .coverage* public
+    - mv collected-coverage/*/.coverage* .
+    - python3 -m coverage combine
+    - python3 -m coverage report --include=aiocoap/\*
+    - python3 -m coverage html --include=aiocoap/\*
+    - mv htmlcov public
+  artifacts:
+    paths:
+      - public
+
+include:
+  - template: SAST.gitlab-ci.yml
+  - template: License-Scanning.gitlab-ci.yml
